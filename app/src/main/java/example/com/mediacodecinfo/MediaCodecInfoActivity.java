@@ -4,37 +4,51 @@ import android.app.Activity;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.os.Bundle;
+import android.os.Environment;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.TextView;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+
 public class MediaCodecInfoActivity extends Activity {
 
-    private static String TAG = "CodecInfo";
     private String textBoxString;
     private TextView textBox;
+
+    private void writeToFile(String data) {
+        try {
+            FileWriter out = new FileWriter(new File(Environment.getExternalStorageDirectory(), "content.txt"));
+            out.write(data);
+            out.close();
+        } catch (IOException e) {
+            Log.e("MediaCodecInfo", e + "");
+        }
+    }
 
     private void printCodecsNamed() {
         int numCodecs = MediaCodecList.getCodecCount();
         textBoxString = "Total Number of Codecs are : " + numCodecs + "\n";
-        Log.d(TAG, "Total Number of Codecs are : " + numCodecs);
 
         for (int i = 0; i < numCodecs; i++) {
             MediaCodecInfo codecInfo = MediaCodecList.getCodecInfoAt(i);
-            textBoxString += "\n\nCodec : " + i + " ( " + (codecInfo.isEncoder() ? "Encoder" : "Decoder") + ")\nName:" + codecInfo.getName() + "\nTypes : ";
-            Log.d(TAG, "\nFor codec " + i + " Encoder : " + codecInfo.isEncoder());
-            Log.d(TAG, "This Codec supports the following types: ");
+            textBoxString += "\n\nCodec : " + i + " ( " + (codecInfo.isEncoder() ? "Encoder" : "Decoder") + ")\nName: " + codecInfo.getName() + "\nTypes : ( ";
+
             String[] types = codecInfo.getSupportedTypes();
+            textBoxString += types.length + " )";
             for (int j = 0; j < types.length; j++) {
-                Log.d(TAG, types[j]);
-                //textBoxString +=  + (j < (types.length - 1) ? ", " : ".");
                 textBoxString += "\n For Type : " + types[j] + " \n Color Formats: ";
                 VCNameResolver codecNames = new VCNameResolver(types[j]);
                 MediaCodecInfo.CodecCapabilities capabilities = codecInfo.getCapabilitiesForType(types[j]);
                 for (int k = 0; k < capabilities.colorFormats.length; k++) {
-                    textBoxString += capabilities.colorFormats[k] + ", ";
+                    String colorName = codecNames.getColorName(capabilities.colorFormats[k]);
+                    colorName = (colorName == null) ? capabilities.colorFormats[k] + "" : colorName;
+                    textBoxString += "\n\t" + colorName + ",";
                 }
+                textBoxString += "\n";
                 for (int k = 0; k < capabilities.profileLevels.length; k++) {
                     String profileName = codecNames.getProfileName(capabilities.profileLevels[k].profile);
                     profileName = (profileName == null) ? capabilities.profileLevels[k].profile + "" : profileName;
@@ -42,12 +56,13 @@ public class MediaCodecInfoActivity extends Activity {
                     String levelName = codecNames.getLevelName(capabilities.profileLevels[k].level);
                     levelName = (levelName == null) ? capabilities.profileLevels[k].level + "" : levelName;
 
-                    textBoxString += "\nProfile: " + profileName
-                            + ", Level: " + levelName;
+                    textBoxString += "Profile: " + profileName
+                            + ", Level: " + levelName + "\n";
                 }
             }
         }
         textBox.setText(textBoxString);
+        writeToFile(textBoxString);
     }
 
     @Override
@@ -78,35 +93,8 @@ public class MediaCodecInfoActivity extends Activity {
         return super.onOptionsItemSelected(item);
     }
 
-    private void printCodecs() {
-        int numCodecs = MediaCodecList.getCodecCount();
-        textBoxString = "Total Number of Codecs are : " + numCodecs + "\n";
-        Log.d(TAG, "Total Number of Codecs are : " + numCodecs);
-
-        for (int i = 0; i < numCodecs; i++) {
-            MediaCodecInfo codecInfo = MediaCodecList.getCodecInfoAt(i);
-            textBoxString += "\n\nCodec : " + i + " ( " + (codecInfo.isEncoder() ? "Encoder" : "Decoder") + ")\nName:" + codecInfo.getName() + "\nTypes : ";
-            Log.d(TAG, "\nFor codec " + i + " Encoder : " + codecInfo.isEncoder());
-            Log.d(TAG, "This Codec supports the following types: ");
-            String[] types = codecInfo.getSupportedTypes();
-            for (int j = 0; j < types.length; j++) {
-                Log.d(TAG, types[j]);
-                //textBoxString +=  + (j < (types.length - 1) ? ", " : ".");
-                textBoxString += "\n For Type : " + types[j] + " \n Color Formats: ";
-                MediaCodecInfo.CodecCapabilities capabilities = codecInfo.getCapabilitiesForType(types[j]);
-                for (int k = 0; k < capabilities.colorFormats.length; k++) {
-                    textBoxString += capabilities.colorFormats[k] + ", ";
-                }
-                for (int k = 0; k < capabilities.profileLevels.length; k++) {
-                    textBoxString += "\nProfile: " + capabilities.profileLevels[k].profile + ", Level: " + capabilities.profileLevels[k].level;
-                }
-            }
-        }
-        textBox.setText(textBoxString);
-    }
-
     private static enum CodecDetail {
-        CODEC_DETAIL_LEVEL, CODEC_DETAIL_PROFILE;
+        CODEC_DETAIL_LEVEL, CODEC_DETAIL_PROFILE, CODEC_DETAIL_COLOR;
     }
 
     private abstract class NameResolver {
@@ -147,12 +135,18 @@ public class MediaCodecInfoActivity extends Activity {
         }
     }
 
+    private class BaseColorName extends NameResolver {
+        public BaseColorName(int id, String name) {
+            super(id, name, CodecDetail.CODEC_DETAIL_COLOR);
+        }
+    }
+
     private final class BaseProfile {
         private String type;
 
         private BaseProfileName[] profiles;
 
-        BaseProfile(String type, BaseProfileName[] profiles) {
+        public BaseProfile(String type, BaseProfileName[] profiles) {
             this.type = type;
             this.profiles = profiles;
         }
@@ -175,7 +169,7 @@ public class MediaCodecInfoActivity extends Activity {
         private String type;
         private BaseLevelName[] levels;
 
-        BaseLevel(String type, BaseLevelName[] levels) {
+        public BaseLevel(String type, BaseLevelName[] levels) {
             this.type = type;
             this.levels = levels;
         }
@@ -188,6 +182,23 @@ public class MediaCodecInfoActivity extends Activity {
             for (BaseLevelName level : levels) {
                 if (level.getId() == id) {
                     return level.getName();
+                }
+            }
+            return null;
+        }
+    }
+
+    private final class BaseColor {
+        private BaseColorName[] colors;
+
+        public BaseColor(BaseColorName[] colors) {
+            this.colors = colors;
+        }
+
+        public String getName(int id) {
+            for (BaseColorName color : colors) {
+                if (color.getId() == id) {
+                    return color.getName();
                 }
             }
             return null;
@@ -296,6 +307,56 @@ public class MediaCodecInfoActivity extends Activity {
                         })
         };
 
+        BaseColor colors = new BaseColor(new BaseColorName[]
+                {
+                        new BaseColorName(1, "COLOR_FormatMonochrome"),
+                        new BaseColorName(2, "COLOR_Format8bitRGB332"),
+                        new BaseColorName(3, "COLOR_Format12bitRGB444"),
+                        new BaseColorName(4, "COLOR_Format16bitARGB4444"),
+                        new BaseColorName(5, "COLOR_Format16bitARGB1555"),
+                        new BaseColorName(6, "COLOR_Format16bitRGB565"),
+                        new BaseColorName(7, "COLOR_Format16bitBGR565"),
+                        new BaseColorName(8, "COLOR_Format18bitRGB666"),
+                        new BaseColorName(9, "COLOR_Format18bitARGB1665"),
+                        new BaseColorName(10, "COLOR_Format19bitARGB1666"),
+                        new BaseColorName(11, "COLOR_Format24bitRGB888"),
+                        new BaseColorName(12, "COLOR_Format24bitBGR888"),
+                        new BaseColorName(13, "COLOR_Format24bitARGB1887"),
+                        new BaseColorName(14, "COLOR_Format25bitARGB1888"),
+                        new BaseColorName(15, "COLOR_Format32bitBGRA8888"),
+                        new BaseColorName(16, "COLOR_Format32bitARGB8888"),
+                        new BaseColorName(17, "COLOR_FormatYUV411Planar"),
+                        new BaseColorName(18, "COLOR_FormatYUV411PackedPlanar"),
+                        new BaseColorName(19, "COLOR_FormatYUV420Planar"),
+                        new BaseColorName(20, "COLOR_FormatYUV420PackedPlanar"),
+                        new BaseColorName(21, "COLOR_FormatYUV420SemiPlanar"),
+                        new BaseColorName(22, "COLOR_FormatYUV422Planar"),
+                        new BaseColorName(23, "COLOR_FormatYUV422PackedPlanar"),
+                        new BaseColorName(24, "COLOR_FormatYUV422SemiPlanar"),
+                        new BaseColorName(25, "COLOR_FormatYCbYCr"),
+                        new BaseColorName(26, "COLOR_FormatYCrYCb"),
+                        new BaseColorName(27, "COLOR_FormatCbYCrY"),
+                        new BaseColorName(28, "COLOR_FormatCrYCbY"),
+                        new BaseColorName(29, "COLOR_FormatYUV444Interleaved"),
+                        new BaseColorName(30, "COLOR_FormatRawBayer8bit"),
+                        new BaseColorName(31, "COLOR_FormatRawBayer10bit"),
+                        new BaseColorName(32, "COLOR_FormatRawBayer8bitcompressed"),
+                        new BaseColorName(33, "COLOR_FormatL2"),
+                        new BaseColorName(34, "COLOR_FormatL4"),
+                        new BaseColorName(35, "COLOR_FormatL8"),
+                        new BaseColorName(36, "COLOR_FormatL16"),
+                        new BaseColorName(37, "COLOR_FormatL24"),
+                        new BaseColorName(38, "COLOR_FormatL32"),
+                        new BaseColorName(39, "COLOR_FormatYUV420PackedSemiPlanar"),
+                        new BaseColorName(40, "COLOR_FormatYUV422PackedSemiPlanar"),
+                        new BaseColorName(41, "COLOR_Format18BitBGR666"),
+                        new BaseColorName(42, "COLOR_Format24BitARGB6666"),
+                        new BaseColorName(43, "COLOR_Format24BitABGR6666"),
+                        new BaseColorName(2130706688, "COLOR_TI_FormatYUV420PackedSemiPlanar"),
+                        new BaseColorName(2130708361, "COLOR_FormatSurface"),
+                        new BaseColorName(2141391872, "COLOR_QCOM_FormatYUV420SemiPlanar")
+                });
+
 
         public VCNameResolver(String type) {
             this.type = type;
@@ -317,6 +378,10 @@ public class MediaCodecInfoActivity extends Activity {
                 }
             }
             return null;
+        }
+
+        public String getColorName(int id) {
+            return colors.getName(id);
         }
     }
 }
