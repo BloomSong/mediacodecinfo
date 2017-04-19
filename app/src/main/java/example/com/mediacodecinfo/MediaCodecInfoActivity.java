@@ -59,6 +59,7 @@ public class MediaCodecInfoActivity extends Activity {
                     textBoxString += "Profile: " + profileName
                             + ", Level: " + levelName + "\n";
                 }
+                textBoxString += "Maximum Instances: " + capabilities.getMaxSupportedInstances() + "\n";
             }
         }
         textBox.setText(textBoxString);
